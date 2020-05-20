@@ -24,7 +24,7 @@ def evaluate_loss(net, data_iter, loss):
 
 def evaluate_accuracy(data_iter, net, device=torch.device('cpu')):
     """Evaluate accuracy of a model on the given data set."""
-    net.eval()  # Switch to evaluation mode for Dropout, BatchNorm etc layers.
+    # net.eval()  # Switch to evaluation mode for Dropout, BatchNorm etc layers.
     acc_sum, n = torch.tensor([0], dtype=torch.float32, device=device), 0
     for X, y in data_iter:
         # Copy the data to device.
@@ -118,26 +118,49 @@ def train_and_predict_rnn(rnn, get_params, init_rnn_state, num_hiddens,
                                          init_rnn_state, num_hiddens,
                                          vocab, device))
 
-def train_ch3(net, train_iter, test_iter, criterion, num_epochs, batch_size, lr=None):
-    """Train and evaluate a model with CPU."""
-    optimizer = optim.SGD(net.parameters(), lr=lr)
+# def train_ch3(net, train_iter, test_iter, criterion, num_epochs, batch_size, lr=None):
+#     """Train and evaluate a model with CPU."""
+#     optimizer = optim.SGD(net.parameters(), lr=lr)
+#     for epoch in range(num_epochs):
+#         train_l_sum, train_acc_sum, n = 0.0, 0.0, 0
+#         for X, y in train_iter:
+#             optimizer.zero_grad()
+
+#             y_hat = net(X)
+#             loss = criterion(y_hat, y)
+#             loss.backward()
+#             optimizer.step()
+
+#             y = y.type(torch.float32)
+#             train_l_sum += loss.item()
+#             train_acc_sum += torch.sum((torch.argmax(y_hat, dim=1).type(torch.FloatTensor) == y).detach()).float()
+#             n += list(y.size())[0]
+#         test_acc = evaluate_accuracy(test_iter, net)
+#         print('epoch %d, loss %.4f, train acc %.3f, test acc %.3f'\
+#             % (epoch + 1, train_l_sum / n, train_acc_sum / n, test_acc))
+def train_ch3(net, train_iter, test_iter, loss, num_epochs, batch_size, params=None, lr=None, optimizer=None):
     for epoch in range(num_epochs):
         train_l_sum, train_acc_sum, n = 0.0, 0.0, 0
         for X, y in train_iter:
-            optimizer.zero_grad()
-
             y_hat = net(X)
-            loss = criterion(y_hat, y)
-            loss.backward()
-            optimizer.step()
-
-            y = y.type(torch.float32)
-            train_l_sum += loss.item()
-            train_acc_sum += torch.sum((torch.argmax(y_hat, dim=1).type(torch.FloatTensor) == y).detach()).float()
-            n += list(y.size())[0]
+            l = loss(y_hat, y).sum()
+            # 梯度清零
+            if optimizer is not None:
+                optimizer.zero_grad()
+            elif params is not None and params[0].grad is not None:
+                for param in params:
+                    param.grad.data.zero_()
+            l.backward()
+            if optimizer is None:
+                sgd(params, lr, batch_size)
+            else:
+                optimizer.step() # “softmax回归的简洁实现”⼀一节将⽤用到
+                
+            train_l_sum += l.item()
+            train_acc_sum += (y_hat.argmax(dim=1) == y).sum().item()
+            n += y.shape[0]
         test_acc = evaluate_accuracy(test_iter, net)
-        print('epoch %d, loss %.4f, train acc %.3f, test acc %.3f'\
-            % (epoch + 1, train_l_sum / n, train_acc_sum / n, test_acc))
+        print('epoch %d, loss %.4f, train acc %.3f, test acc %.3f' % (epoch + 1, train_l_sum / n, train_acc_sum / n, test_acc))
 
 
 def train_ch5(net, train_iter, test_iter, criterion, num_epochs, batch_size, device, lr=None):
